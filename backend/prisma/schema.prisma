@@ -1,0 +1,195 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  ANALYST
+  VIEWER
+}
+
+enum DatasetStatus {
+  PENDING
+  PROCESSING
+  READY
+  FAILED
+}
+
+enum InsightType {
+  TREND
+  ANOMALY
+  CORRELATION
+  SUMMARY
+  FORECAST
+  KPI
+}
+
+enum ReportFormat {
+  PDF
+  CSV
+  JSON
+  XLSX
+}
+
+model User {
+  id            String   @id @default(cuid())
+  email         String   @unique
+  name          String
+  passwordHash  String
+  role          Role     @default(ANALYST)
+  avatarUrl     String?
+  company       String?
+  jobTitle      String?
+  timezone      String   @default("UTC")
+  isActive      Boolean  @default(true)
+  isEmailVerified Boolean @default(false)
+  lastLoginAt   DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  refreshTokens RefreshToken[]
+  datasets      Dataset[]
+  dashboards    Dashboard[]
+  insights      Insight[]
+  reports       Report[]
+  chatSessions  ChatSession[]
+
+  @@map("users")
+}
+
+model RefreshToken {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  userId    String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("refresh_tokens")
+}
+
+model Dataset {
+  id           String        @id @default(cuid())
+  name         String
+  description  String?
+  fileName     String
+  fileSize     Int
+  mimeType     String
+  storagePath  String
+  status       DatasetStatus @default(PENDING)
+  rowCount     Int?
+  columnCount  Int?
+  schema       Json?
+  previewData  Json?
+  userId       String
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  user        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  dashboards  Dashboard[]
+  insights    Insight[]
+  reports     Report[]
+  chatSessions ChatSession[]
+
+  @@map("datasets")
+}
+
+model Dashboard {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  config      Json
+  isPublic    Boolean  @default(false)
+  userId      String
+  datasetId   String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  dataset Dataset @relation(fields: [datasetId], references: [id], onDelete: Cascade)
+  widgets Widget[]
+
+  @@map("dashboards")
+}
+
+model Widget {
+  id          String   @id @default(cuid())
+  type        String
+  title       String
+  config      Json
+  position    Json
+  dashboardId String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  dashboard Dashboard @relation(fields: [dashboardId], references: [id], onDelete: Cascade)
+
+  @@map("widgets")
+}
+
+model Insight {
+  id          String      @id @default(cuid())
+  type        InsightType
+  title       String
+  summary     String
+  details     Json
+  confidence  Float
+  datasetId   String
+  userId      String
+  createdAt   DateTime    @default(now())
+
+  dataset Dataset @relation(fields: [datasetId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("insights")
+}
+
+model Report {
+  id          String       @id @default(cuid())
+  name        String
+  format      ReportFormat
+  storagePath String?
+  config      Json
+  datasetId   String
+  userId      String
+  createdAt   DateTime     @default(now())
+
+  dataset Dataset @relation(fields: [datasetId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("reports")
+}
+
+model ChatSession {
+  id        String        @id @default(cuid())
+  title     String?
+  datasetId String
+  userId    String
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  dataset  Dataset      @relation(fields: [datasetId], references: [id], onDelete: Cascade)
+  user     User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages ChatMessage[]
+
+  @@map("chat_sessions")
+}
+
+model ChatMessage {
+  id        String   @id @default(cuid())
+  role      String
+  content   String
+  metadata  Json?
+  sessionId String
+  createdAt DateTime @default(now())
+
+  session ChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@map("chat_messages")
+}

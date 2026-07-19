@@ -1,0 +1,119 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: registry.redhat.io/rhel9/postgresql-15:latest
+    container_name: insightforge_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRESQL_USER: ${POSTGRES_USER}
+      POSTGRESQL_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRESQL_DATABASE: ${POSTGRES_DB}
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - postgres_data:/var/lib/pgsql/data
+    networks:
+      - insightforge_net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: registry.redhat.io/rhel9/redis-7:latest
+    container_name: insightforge_redis
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:6379:6379"
+    networks:
+      - insightforge_net
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: insightforge_backend
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      REDIS_URL: redis://redis:6379
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET}
+      FRONTEND_URL: ${FRONTEND_URL}
+    ports:
+      - "127.0.0.1:3001:3001"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - insightforge_net
+
+  ai-engine:
+    build:
+      context: ./ai-engine
+      dockerfile: Dockerfile
+    container_name: insightforge_ai
+    restart: unless-stopped
+    environment:
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      WATSONX_API_KEY: ${WATSONX_API_KEY}
+      WATSONX_PROJECT_ID: ${WATSONX_PROJECT_ID}
+      WATSONX_URL: ${WATSONX_URL}
+      BACKEND_URL: http://backend:3001
+      SECRET_KEY: ${AI_ENGINE_SECRET}
+    ports:
+      - "127.0.0.1:8000:8000"
+    depends_on:
+      - backend
+    networks:
+      - insightforge_net
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: insightforge_frontend
+    restart: unless-stopped
+    environment:
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
+      NEXT_PUBLIC_AI_URL: ${NEXT_PUBLIC_AI_URL}
+    ports:
+      - "127.0.0.1:3000:3000"
+    depends_on:
+      - backend
+    networks:
+      - insightforge_net
+
+  nginx:
+    image: registry.redhat.io/ubi9/nginx-122:latest
+    container_name: insightforge_nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+    depends_on:
+      - frontend
+      - backend
+      - ai-engine
+    networks:
+      - insightforge_net
+
+volumes:
+  postgres_data:
+
+networks:
+  insightforge_net:
+    driver: bridge

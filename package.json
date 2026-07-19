@@ -1,0 +1,16 @@
+{
+  "name": "insightforge-ai",
+  "private": true,
+  "workspaces": [
+    "frontend",
+    "backend"
+  ],
+  "scripts": {
+    "dev:frontend": "cd frontend && npm run dev",
+    "dev:backend": "cd backend && npm run start:dev",
+    "dev:ai": "cd ai-engine && uvicorn main:app --reload --host 127.0.0.1 --port 8000",
+    "build": "npm run build --workspaces",
+    "docker:up": "docker compose up --build -d",
+    "docker:down": "docker compose down"
+  }
+}
